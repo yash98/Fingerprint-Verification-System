@@ -1,5 +1,9 @@
 {
 	"cSpell.words": [
-		"Binarization"
+		"Binarization",
+		"dtype",
+		"imread",
+		"imshow",
+		"numpy"
 	]
 }
