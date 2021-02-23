@@ -1,9 +1,14 @@
 {
 	"cSpell.words": [
 		"Binarization",
+		"cval",
 		"dtype",
 		"imread",
 		"imshow",
-		"numpy"
+		"ksize",
+		"ndimage",
+		"numpy",
+		"scipy",
+		"sobel"
 	]
 }

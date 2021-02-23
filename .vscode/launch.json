@@ -1,0 +1,16 @@
+{
+	// Use IntelliSense to learn about possible attributes.
+	// Hover to view descriptions of existing attributes.
+	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Fingerprint Verification",
+			"type": "python",
+			"request": "launch",
+			"program": "fingerprint_verification.py",
+			"console": "integratedTerminal",
+			"args": ["db/DB2_B/101_1.tif"]
+		}
+	]
+}

@@ -1,5 +1,7 @@
 # Steps required to verify fingerprint
 
+## Specified in Slides
+
 1. Preprocessing
    1. Segmentation
    2. Normalization
@@ -17,3 +19,7 @@
    1. Generalized Hough Transform for Alignment
    2. Pairing Minutiae
    3. Match Score Calculation
+
+## Followed in Code
+
+1. 
