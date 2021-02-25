@@ -9,5 +9,5 @@ if __name__ == "__main__":
 
 	args = parser.parse_args()
 
-	target_fp = src.fingerprint.fp(args.target_fingerprint_image, 20)
+	target_fp = src.fingerprint.fp(args.target_fingerprint_image, 15)
 

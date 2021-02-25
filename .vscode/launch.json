@@ -10,7 +10,7 @@
 			"request": "launch",
 			"program": "fingerprint_verification.py",
 			"console": "integratedTerminal",
-			"args": ["db/DB2_B/101_1.tif"]
+			"args": ["db/DB2_B/110_1.tif"]
 		}
 	]
 }

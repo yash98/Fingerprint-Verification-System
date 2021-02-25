@@ -1,14 +1,18 @@
 {
 	"cSpell.words": [
 		"Binarization",
+		"Gabor",
+		"OTSU",
 		"cval",
 		"dtype",
 		"imread",
 		"imshow",
 		"ksize",
 		"ndimage",
+		"neighbourhood",
 		"numpy",
 		"scipy",
+		"skeletonize",
 		"sobel"
 	]
 }
