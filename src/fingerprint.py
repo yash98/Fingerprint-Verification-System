@@ -4,18 +4,24 @@ from . import util
 import cv2 as cv
 import sys
 import numpy as np
-from math import floor, ceil
+import math
 from skimage.draw import line
 from skimage.morphology import skeletonize
 import fingerprint_enhancer
 np.set_printoptions(threshold=sys.maxsize)
 
+def get_line_ends(i, j, W, tang):
+	if -1 <= tang and tang <= 1:
+		begin = (int((-W/2) * tang + j + W/2), i)
+		end = (int((W/2) * tang + j + W/2), i+W)
+	else:
+		begin = (j + W//2, int(i + W/2 + W/(2 * tang)))
+		end = (j - W//2, int(i + W/2 - W/(2 * tang)))
+	return (begin, end)
+
 class fp:
 	def __init__(self, path_fp_img, segment_block_size):
 		self.original_img = cv.imread(path_fp_img, cv.IMREAD_GRAYSCALE)
-		# kernel_open_close = cv.getStructuringElement(cv.MORPH_RECT,(segment_block_size//10, segment_block_size//10))
-		# self.original_img = cv.morphologyEx(self.original_img, cv.MORPH_OPEN, kernel_open_close)
-		# self.original_img = cv.morphologyEx(self.original_img, cv.MORPH_CLOSE, kernel_open_close)
 		self.segment_block_size = segment_block_size
 
 		# Preprocessing
@@ -40,7 +46,7 @@ class fp:
 		self.segmented_image[self.segmentation_mask == 0] = 255
 
 		# Normalization
-		required_variance = 50000.0
+		required_variance = 5000.0
 		required_mean = 127.0
 		current_variance = np.var(self.segmented_image)
 		current_mean = np.mean(self.segmented_image)
@@ -48,8 +54,8 @@ class fp:
 		self.normalized_image = np.where(self.segmented_image > current_mean, required_mean + temp_dev, required_mean - temp_dev)
 
 		# Ridge orientation calculation
-		grad_x = cv.Sobel(self.normalized_image, cv.CV_64F, 1, 0, ksize=3)
-		grad_y = cv.Sobel(self.normalized_image, cv.CV_64F, 0, 1, ksize=3)
+		grad_x = cv.Sobel(self.normalized_image/255, cv.CV_64F, 0, 1, ksize=3)
+		grad_y = cv.Sobel(self.normalized_image/255, cv.CV_64F, 1, 0, ksize=3)
 
 		local_directions_x = np.zeros(self.original_img.shape)
 		local_directions_y = np.zeros(self.original_img.shape)
@@ -67,79 +73,88 @@ class fp:
 		gaussian_local_directions_x = cv.GaussianBlur(local_directions_x, gaussian_blur_kernel_size, gaussian_std)
 		gaussian_local_directions_y = cv.GaussianBlur(local_directions_y, gaussian_blur_kernel_size, gaussian_std)
 
-		# self.orientation_map = 0.5*(np.arctan2(gaussian_local_directions_x, gaussian_local_directions_y)+np.pi)
 		self.orientation_map = 0.5*(np.arctan2(gaussian_local_directions_x, gaussian_local_directions_y)+np.pi)
 
-		# Frequency map calculation
-		self.frequency_map = np.zeros(self.original_img.shape)
-		buffer_windows = int(ceil(segment_block_size / 5))
+		self.orientation_image = cv.cvtColor((self.normalized_image).astype(np.uint8), cv.COLOR_GRAY2RGB)
+		# self.orientation_image = np.ones(self.normalized_image.shape)
 		for i in range(0, self.original_img.shape[0], segment_block_size):
 			for j in range(0, self.original_img.shape[1], segment_block_size):
 				end_i = min(self.original_img.shape[0], i+segment_block_size)
 				end_j = min(self.original_img.shape[1], j+segment_block_size)
 				line_direction = np.average(self.orientation_map[i:end_i, j:end_j])
-				middle_line = None
-				if np.pi / 4 < line_direction < 3 * np.pi / 4:
-					mid_j = (j+end_j)/2
-					diff_i = end_i - i
-					offset_j = diff_i / 2 / np.tan(line_direction)
-					middle_line = zip(*line(i, floor(mid_j+offset_j), end_i, floor(mid_j-offset_j)))
-				else:
-					mid_i = (i+end_i)/2
-					diff_j = end_j - j
-					offset_i = np.tan(line_direction) * diff_j/2
-					middle_line = zip(*line(floor(mid_i+offset_i), j, floor(mid_i-offset_i), end_j))
+				begin, end = get_line_ends(i, j, self.segment_block_size, math.tan(line_direction))
+				cv.line(self.orientation_image, begin, end, (255, 0, 0), 1)
 
-				is_ridge = None
-				def check_ridge(x, y): 
-					if self.normalized_image[x, y] > required_mean:
-						return True
-					return False
+		# Frequency map calculation
+		# self.frequency_map = np.zeros(self.original_img.shape)
+		# buffer_windows = int(ceil(segment_block_size / 5))
+		# for i in range(0, self.original_img.shape[0], segment_block_size):
+		# 	for j in range(0, self.original_img.shape[1], segment_block_size):
+		# 		end_i = min(self.original_img.shape[0], i+segment_block_size)
+		# 		end_j = min(self.original_img.shape[1], j+segment_block_size)
+		# 		line_direction = np.average(self.orientation_map[i:end_i, j:end_j])
+		# 		middle_line = None
+		# 		if np.pi / 4 < line_direction < 3 * np.pi / 4:
+		# 			mid_j = (j+end_j)/2
+		# 			diff_i = end_i - i
+		# 			offset_j = diff_i / 2 / np.tan(line_direction)
+		# 			middle_line = zip(*line(i, floor(mid_j+offset_j), end_i, floor(mid_j-offset_j)))
+		# 		else:
+		# 			mid_i = (i+end_i)/2
+		# 			diff_j = end_j - j
+		# 			offset_i = np.tan(line_direction) * diff_j/2
+		# 			middle_line = zip(*line(floor(mid_i+offset_i), j, floor(mid_i-offset_i), end_j))
+
+		# 		is_ridge = None
+		# 		def check_ridge(x, y): 
+		# 			if self.normalized_image[x, y] > required_mean:
+		# 				return True
+		# 			return False
 				
-				ridges = []
-				current_buffer_window = 0
-				for x, y in middle_line:
-					try:
-						if is_ridge is None:
-							is_ridge = check_ridge(x, y)
-							if is_ridge:
-								ridges.append((x, y))
-						else:
-							current_check = check_ridge(x, y)
-							current_buffer_window += 1
-							# if is_ridge != current_check and current_buffer_window <= buffer_windows:
-							if is_ridge != current_check:
-								is_ridge = current_check
-								current_buffer_window = 0
-								if is_ridge:
-									ridges.append((x, y))
-					except IndexError:
-						continue
+		# 		ridges = []
+		# 		current_buffer_window = 0
+		# 		for x, y in middle_line:
+		# 			try:
+		# 				if is_ridge is None:
+		# 					is_ridge = check_ridge(x, y)
+		# 					if is_ridge:
+		# 						ridges.append((x, y))
+		# 				else:
+		# 					current_check = check_ridge(x, y)
+		# 					current_buffer_window += 1
+		# 					# if is_ridge != current_check and current_buffer_window <= buffer_windows:
+		# 					if is_ridge != current_check:
+		# 						is_ridge = current_check
+		# 						current_buffer_window = 0
+		# 						if is_ridge:
+		# 							ridges.append((x, y))
+		# 			except IndexError:
+		# 				continue
 				
-				distance_sum = 0.0
-				for i in range(len(ridges)-1):
-					distance_sum += util.euclidean_distance(*ridges[i], *ridges[i+1])
-				if len(ridges) == 1:
-					distance_sum = segment_block_size
+		# 		distance_sum = 0.0
+		# 		for i in range(len(ridges)-1):
+		# 			distance_sum += util.euclidean_distance(*ridges[i], *ridges[i+1])
+		# 		if len(ridges) == 1:
+		# 			distance_sum = segment_block_size
 
-				local_freq = None
-				if distance_sum == 0:
-					local_freq = 1.0
-				else:
-					local_freq = len(ridges)/distance_sum
+		# 		local_freq = None
+		# 		if distance_sum == 0:
+		# 			local_freq = 1.0
+		# 		else:
+		# 			local_freq = len(ridges)/distance_sum
 
-				self.frequency_map[i:end_i, j:end_j] = local_freq
+		# 		self.frequency_map[i:end_i, j:end_j] = local_freq
 		
 		# Apply Gabor filter
-		self.enhanced_image = np.zeros(self.original_img.shape)
-		for i in range(0, self.original_img.shape[0], segment_block_size):
-			for j in range(0, self.original_img.shape[1], segment_block_size):
-				end_i = min(self.original_img.shape[0], i+segment_block_size)
-				end_j = min(self.original_img.shape[1], j+segment_block_size)
-				average_orientation = np.average(self.orientation_map[i:end_i, j:end_j]) + np.pi
-				gabor_kernel = cv.getGaborKernel((segment_block_size, segment_block_size), 5*self.frequency_map[i, j], average_orientation, 10.0*self.frequency_map[i, j], 1.0)
-				# gabor_kernel = cv.getGaborKernel((segment_block_size, segment_block_size), 5.0, average_orientation, 1.0, 1.0)
-				self.enhanced_image[i: end_i, j: end_j] = cv.filter2D(self.normalized_image[i: end_i, j: end_j], cv.CV_64F, gabor_kernel)
+		# self.enhanced_image = np.zeros(self.original_img.shape)
+		# for i in range(0, self.original_img.shape[0], segment_block_size):
+		# 	for j in range(0, self.original_img.shape[1], segment_block_size):
+		# 		end_i = min(self.original_img.shape[0], i+segment_block_size)
+		# 		end_j = min(self.original_img.shape[1], j+segment_block_size)
+		# 		average_orientation = np.average(self.orientation_map[i:end_i, j:end_j]) + np.pi
+		# 		gabor_kernel = cv.getGaborKernel((segment_block_size, segment_block_size), 5*self.frequency_map[i, j], average_orientation, 10.0*self.frequency_map[i, j], 1.0)
+		# 		# gabor_kernel = cv.getGaborKernel((segment_block_size, segment_block_size), 5.0, average_orientation, 1.0, 1.0)
+		# 		self.enhanced_image[i: end_i, j: end_j] = cv.filter2D(self.normalized_image[i: end_i, j: end_j], cv.CV_64F, gabor_kernel)
 		
 		self.enhanced_image = fingerprint_enhancer.enhance_Fingerprint(self.normalized_image)
 
@@ -165,7 +180,7 @@ class fp:
 			if img[i, j] == 0.0:
 				offsets = [(-1, -1), (-1, 0), (-1, 1),  # p1 p2 p3
 						(0, 1),  (1, 1), (1, 0),        # p8    p4
-                  		(1, -1), (0, -1), (-1, -1)] 	# p7 p6 p5
+				  		(1, -1), (0, -1), (-1, -1)] 	# p7 p6 p5
 				pixel_values = [img[i+x, j+y] for x, y in offsets]
 				sum_cn = 0.0
 				for a in range(8):
@@ -179,7 +194,7 @@ class fp:
 			for j in range(1, self.original_img.shape[1]-1):
 				current_cn = cn(i, j, self.thinned_image)
 				if current_cn == 1 or current_cn == 3:
-					self.minutiae[(i, j)] = current_cn
+					self.minutiae[(i, j)] = (current_cn, self.orientation_map[i, j])
 
 		# False minutiae removal
 		# Close to boundary case
@@ -236,7 +251,7 @@ class fp:
 				n_x, n_y = x+d_x, y+d_y
 				if img[n_x, n_y] == 0.0 and not_visited_pixels[x, y]:
 					if (n_x, n_y) in self.minutiae:
-						current_minutiae_type = self.minutiae[(n_x, n_y)]
+						current_minutiae_type, _ = self.minutiae[(n_x, n_y)]
 						returned_minutiae = removal_traversal(n_x, n_y, img, default_thresh, current_minutiae_type)
 						to_return_minutiae = min(current_minutiae_type, to_return_minutiae)
 						if current_minutiae_type + last_minutiae_type <= 4.0 or current_minutiae_type + returned_minutiae <= 4.0:
@@ -249,38 +264,83 @@ class fp:
 		# Deleting while iterating
 		for (x, y) in sorted(list(self.minutiae.keys()), key=lambda x: (x[0], x[1],)):
 			if (x, y) in self.minutiae:
-				if removal_traversal(x, y, self.thinned_image, default_thresh, self.minutiae[(x, y)]) <= 3.0:
+				if removal_traversal(x, y, self.thinned_image, default_thresh, self.minutiae[(x, y)][0]) <= 3.0:
 					del self.minutiae[(x, y)]
 
 		# Draw minutiae on image
 		for (x, y) in self.minutiae:
-			c_n = self.minutiae[(x, y)]
+			c_n, _ = self.minutiae[(x, y)]
 			if c_n == 1:
 				cv.circle(self.minutiae_img, (y,x), radius=3, color=(0, 0, 255), thickness=1)
 			if c_n == 3:
 				cv.circle(self.minutiae_img, (y,x), radius=3, color=(0, 255, 0), thickness=1)
 
-		cv.imshow("seg mask", self.segmentation_mask)
-		cv.waitKey(0)
-		cv.imshow("norm", self.normalized_image)
-		cv.waitKey(0)
-		cv.imshow("orient", self.orientation_map/np.pi)
-		cv.waitKey(0)
-		cv.imshow("freq map", self.frequency_map)
-		cv.waitKey(0)
-		cv.imshow("enhanced", self.enhanced_image)
-		cv.waitKey(0)
-		cv.imshow("thinned", self.thinned_image)
-		cv.waitKey(0)
-		cv.imshow("minutiae segment mask", minutiae_segment_mask)
-		cv.waitKey(0)
-		cv.imshow("minutiae", self.minutiae_img)
-		cv.waitKey(0)
-		# not_visited_pixels = cv.erode(not_visited_pixels, kernel_open_close)
-		cv.imshow("not visited", not_visited_pixels)
-		cv.waitKey(0)
-
+		# cv.imshow("seg mask", self.segmentation_mask)
+		# cv.waitKey(0)
+		# cv.imshow("norm", self.normalized_image)
+		# cv.waitKey(0)
+		# cv.imshow("orient", self.orientation_map/np.pi)
+		# cv.waitKey(0)
+		# cv.imshow("or", self.orientation_image)
+		# cv.waitKey(0)
+		# cv.imshow("freq map", self.frequency_map)
+		# cv.waitKey(0)
+		# cv.imshow("enhanced", self.enhanced_image)
+		# cv.waitKey(0)
+		# cv.imshow("thinned", self.thinned_image)
+		# cv.waitKey(0)
+		# cv.imshow("minutiae segment mask", minutiae_segment_mask)
+		# cv.waitKey(0)
+		# cv.imshow("minutiae", self.minutiae_img)
+		# cv.waitKey(0)
+		# # not_visited_pixels = cv.erode(not_visited_pixels, kernel_open_close)(
+	
 	def alignment(self, other_fp):
 		# Generalized Hough Transform
 		# It is assumed both fingerprint have same size
-		a = np.zeros((180, self.original_img.shape[0], self.original_img.shape[1]))
+		# query_fp.alignment(template_fp)
+		accumulator = {}
+
+		for (xt, yt), (_, theta_t) in other_fp.minutiae.items():
+			for (xq, yq), (_, theta_q) in self.minutiae.items():
+				d_theta = theta_t - theta_q
+				d_x = xt - xq*math.cos(d_theta) - yq*math.sin(d_theta)
+				d_y = yt + xq*math.sin(d_theta) - yq*math.cos(d_theta)
+				conf = util.custom_round(180*d_theta/np.pi), util.custom_round(d_x, self.segment_block_size), util.custom_round(d_y, self.segment_block_size)
+				if conf in accumulator:
+					accumulator[conf] += 1
+				else:
+					accumulator[conf] = 1
+		
+		# print(accumulator)
+		(theta, x, y) = max(accumulator, key=accumulator.get)
+		return np.pi*theta/180, x, y
+	
+	def match(self, other_fp, transform_config):
+		flag_q = np.zeros((len(self.minutiae),))
+		flag_t = np.zeros(len(other_fp.minutiae),)
+		count_matched = 0
+		matched_minutiae = []
+
+		angle_thresh = 5 * np.pi / 180
+		distance_thresh = self.segment_block_size/4
+
+		ht_theta, ht_x, ht_y = transform_config
+		i = 0
+		for (xt, yt), (_, theta_t) in other_fp.minutiae.items():
+			j = 0
+			for (xq, yq), (_, theta_q) in self.minutiae.items():
+				d_theta = theta_t - theta_q - ht_theta
+				d_x = xt - xq*math.cos(ht_theta) - yq*math.sin(ht_theta) - ht_x
+				d_y = yt + xq*math.sin(ht_theta) - yq*math.cos(ht_theta) - ht_y
+
+				if flag_t[i] == 0.0 and flag_q[j] == 0.0 and util.euclidean_distance(0, 0, d_x, d_y) <= distance_thresh and abs(d_theta) <= abs(angle_thresh):
+					flag_t[i] = 1.0
+					flag_t[i] = 1.0
+					count_matched += 1
+					matched_minutiae.append(((xt, yt), (xq, yq)))
+				j += 1
+			i += 1
+		
+		print(matched_minutiae)
+		return count_matched, i, j
