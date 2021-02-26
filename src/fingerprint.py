@@ -1,14 +1,13 @@
 # File for Base class to store fingerprint
-import scipy
-from scipy.ndimage.interpolation import rotate
 from . import util
 
-import cv2 as cv
 import sys
-import numpy as np
 import math
-from skimage.draw import line
+import numpy as np
+import scipy
+from scipy.ndimage.interpolation import rotate
 from skimage.morphology import skeletonize
+import cv2 as cv
 import fingerprint_enhancer
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -22,7 +21,7 @@ def get_line_ends(i, j, W, tang):
 	return (begin, end)
 
 class fp:
-	def __init__(self, path_fp_img, segment_block_size):
+	def __init__(self, path_fp_img, segment_block_size=15):
 		self.original_img = cv.imread(path_fp_img, cv.IMREAD_GRAYSCALE)
 		self.segment_block_size = segment_block_size
 
@@ -262,8 +261,6 @@ class fp:
 						cluster_found = True
 						cluster_list.add((x1, y1))
 						cluster_list.add((x2, y2))
-						# centroid_sum = np.array([x1+x2, y1+y2]).astype('float')
-						# centroid = centroid_sum/len(cluster_list)
 			
 			if not cluster_found:
 				return False
@@ -276,8 +273,6 @@ class fp:
 							dist = util.euclidean_distance(x1, y1, x2, y2)
 							if dist <= dist_thresh:
 								cluster_list.add((x1, y1))
-								# centroid_sum += np.array([x1, y1])
-								# centroid = centroid_sum/len(cluster_list)
 
 			for (x1, y1) in cluster_list:
 				del self.minutiae[(x1, y1)]
@@ -337,7 +332,7 @@ class fp:
 		(theta, x, y) = max(accumulator, key=accumulator.get)
 		return np.pi*theta/180, x, y
 	
-	def match(self, other_fp, transform_config):
+	def pair(self, other_fp, transform_config):
 		flag_q = np.zeros((len(self.minutiae),))
 		flag_t = np.zeros(len(other_fp.minutiae),)
 		count_matched = 0
@@ -364,4 +359,7 @@ class fp:
 				j += 1
 			i += 1
 		
-		return count_matched, i, j
+		return count_matched, i
+
+	def match(self, other_fp):
+		return self.pair(other_fp, self.alignment(other_fp))
