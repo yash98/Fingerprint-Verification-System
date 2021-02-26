@@ -11,15 +11,6 @@ import cv2 as cv
 import fingerprint_enhancer
 np.set_printoptions(threshold=sys.maxsize)
 
-def get_line_ends(i, j, W, tang):
-	if -1 <= tang and tang <= 1:
-		begin = (int((-W/2) * tang + j + W/2), i)
-		end = (int((W/2) * tang + j + W/2), i+W)
-	else:
-		begin = (j + W//2, int(i + W/2 + W/(2 * tang)))
-		end = (j - W//2, int(i + W/2 - W/(2 * tang)))
-	return (begin, end)
-
 class fp:
 	def __init__(self, path_fp_img, segment_block_size=15):
 		self.original_img = cv.imread(path_fp_img, cv.IMREAD_GRAYSCALE)
@@ -83,40 +74,40 @@ class fp:
 				end_i = min(self.original_img.shape[0], i+segment_block_size)
 				end_j = min(self.original_img.shape[1], j+segment_block_size)
 				line_direction = np.average(self.orientation_map[i:end_i, j:end_j])
-				begin, end = get_line_ends(i, j, self.segment_block_size, math.tan(line_direction))
+				begin, end = util.get_line_ends(i, j, self.segment_block_size, math.tan(line_direction))
 				cv.line(self.orientation_image, begin, end, (255, 0, 0), 1)
 
 		# Frequency map calculation
-		self.frequency_map = np.zeros(self.original_img.shape)
-		min_wavelength, max_wavelength = 3, 10
-		for i in range(0, self.original_img.shape[0], segment_block_size):
-			for j in range(0, self.original_img.shape[1], segment_block_size):
-				end_i = min(self.original_img.shape[0], i+segment_block_size)
-				end_j = min(self.original_img.shape[1], j+segment_block_size)
-				segment_block = self.normalized_image[i:end_i, j:end_j]
-				orientation = np.mean(self.orientation_map[i: end_i, j:end_j])
-				rotated_block = scipy.ndimage.rotate(segment_block, orientation*180/np.pi + 90, axes=(1, 0), reshape = False, order = 3, mode = 'nearest')
-				# # Crop
-				# cropsize = round(self.orientation_image.shape[1]/np.sqrt(2))
-				# offset = round((self.orientation_image.shape[1]-cropsize)/2)
-				# rotated_block = rotated_block[offset:offset+cropsize][offset:offset+cropsize]
-				#  Peak calculation
-				ridge_sum = np.sum(rotated_block, axis = 0)
-				dilation = scipy.ndimage.grey_dilation(ridge_sum, 5, structure=np.ones(5))
-				ridge_noise = np.abs(dilation - ridge_sum)
-				peak_thresh = 2
-				max_points = (ridge_noise < peak_thresh) & (ridge_sum > np.mean(ridge_sum))
-				max_index = np.where(max_points)
-				_, num_peaks = np.shape(max_index)
-				# Set frequency in map according to map
-				if num_peaks < 2:
-					self.frequency_map[i: end_i, j: end_j] = 0.0
-				else:
-					wavelength = (max_index[0][-1] - max_index[0][0])/(num_peaks - 1)
-					if min_wavelength <= wavelength <= max_wavelength:
-						self.frequency_map[i: end_i, j: end_j] = 1.0 / wavelength
-					else:
-						self.frequency_map[i: end_i, j: end_j] = 0.0
+		# self.frequency_map = np.zeros(self.original_img.shape)
+		# min_wavelength, max_wavelength = 3, 10
+		# for i in range(0, self.original_img.shape[0], segment_block_size):
+		# 	for j in range(0, self.original_img.shape[1], segment_block_size):
+		# 		end_i = min(self.original_img.shape[0], i+segment_block_size)
+		# 		end_j = min(self.original_img.shape[1], j+segment_block_size)
+		# 		segment_block = self.normalized_image[i:end_i, j:end_j]
+		# 		orientation = np.mean(self.orientation_map[i: end_i, j:end_j])
+		# 		rotated_block = scipy.ndimage.rotate(segment_block, orientation*180/np.pi + 90, axes=(1, 0), reshape = False, order = 3, mode = 'nearest')
+		# 		# # Crop
+		# 		# cropsize = round(self.orientation_image.shape[1]/np.sqrt(2))
+		# 		# offset = round((self.orientation_image.shape[1]-cropsize)/2)
+		# 		# rotated_block = rotated_block[offset:offset+cropsize][offset:offset+cropsize]
+		# 		#  Peak calculation
+		# 		ridge_sum = np.sum(rotated_block, axis = 0)
+		# 		dilation = scipy.ndimage.grey_dilation(ridge_sum, 5, structure=np.ones(5))
+		# 		ridge_noise = np.abs(dilation - ridge_sum)
+		# 		peak_thresh = 2
+		# 		max_points = (ridge_noise < peak_thresh) & (ridge_sum > np.mean(ridge_sum))
+		# 		max_index = np.where(max_points)
+		# 		_, num_peaks = np.shape(max_index)
+		# 		# Set frequency in map according to map
+		# 		if num_peaks < 2:
+		# 			self.frequency_map[i: end_i, j: end_j] = 0.0
+		# 		else:
+		# 			wavelength = (max_index[0][-1] - max_index[0][0])/(num_peaks - 1)
+		# 			if min_wavelength <= wavelength <= max_wavelength:
+		# 				self.frequency_map[i: end_i, j: end_j] = 1.0 / wavelength
+		# 			else:
+		# 				self.frequency_map[i: end_i, j: end_j] = 0.0
 				
 		# Apply Gabor filter
 		# self.enhanced_image = np.zeros(self.original_img.shape)
@@ -247,7 +238,7 @@ class fp:
 		# Removal Cluster Centroid
 		def cluster_removal():
 			minutiae_list = list(self.minutiae.items())
-			dist_thresh = self.segment_block_size/4
+			dist_thresh = self.segment_block_size/2
 			cluster_found = False
 			cluster_list = set()
 			# centroid_sum = None
@@ -258,9 +249,9 @@ class fp:
 					(x2, y2), (_, _) = minutiae_list[j]
 					dist = util.euclidean_distance(x1, y1, x2, y2)
 					if dist <= dist_thresh:
-						cluster_found = True
 						cluster_list.add((x1, y1))
 						cluster_list.add((x2, y2))
+						cluster_found = True
 			
 			if not cluster_found:
 				return False
@@ -309,21 +300,20 @@ class fp:
 		# cv.waitKey(0)
 		# cv.imshow("minutiae", self.minutiae_img)
 		# cv.waitKey(0)
-		# # not_visited_pixels = cv.erode(not_visited_pixels, kernel_open_close)(
 	
 	def alignment(self, other_fp):
 		# Generalized Hough Transform
 		# It is assumed both fingerprint have same size
-		# query_fp.alignment(template_fp)
 		accumulator = {}
 
 		for (xt, yt), (_, theta_t) in other_fp.minutiae.items():
 			for (xq, yq), (_, theta_q) in self.minutiae.items():
-				d_theta = abs(theta_t - theta_q)
+				d_theta = theta_t - theta_q
+				# d_theta = abs(theta_t - theta_q)
 				d_theta = min(d_theta, 2*np.pi - d_theta)
 				d_x = xt - xq*math.cos(d_theta) + yq*math.sin(d_theta)
 				d_y = yt - xq*math.sin(d_theta) - yq*math.cos(d_theta)
-				conf = util.custom_round(180*d_theta/np.pi, 2), util.custom_round(d_x, self.segment_block_size), util.custom_round(d_y, self.segment_block_size//4)
+				conf = util.custom_round(180*d_theta/np.pi, 5), util.custom_round(d_x, self.segment_block_size//4), util.custom_round(d_y, self.segment_block_size//4)
 				if conf in accumulator:
 					accumulator[conf] += 1
 				else:
@@ -333,12 +323,14 @@ class fp:
 		return np.pi*theta/180, x, y
 	
 	def pair(self, other_fp, transform_config):
+		# Calculate which minutiae match to which minutiae in other fingerprint
+		# Looser condition for matched minutiae than that during alignment
 		flag_q = np.zeros((len(self.minutiae),))
 		flag_t = np.zeros(len(other_fp.minutiae),)
 		count_matched = 0
 		matched_minutiae = []
 
-		angle_thresh = 20 * np.pi / 180
+		angle_thresh = 10 * np.pi / 180
 		distance_thresh = self.segment_block_size/2
 
 		ht_theta, ht_x, ht_y = transform_config
@@ -346,7 +338,8 @@ class fp:
 		for (xt, yt), (_, theta_t) in other_fp.minutiae.items():
 			j = 0
 			for (xq, yq), (_, theta_q) in self.minutiae.items():
-				d_theta = abs(abs(theta_t - theta_q) - ht_theta)
+				d_theta = theta_t - theta_q - ht_theta
+				# d_theta = abs(abs(theta_t - theta_q) - abs(ht_theta))
 				d_theta = min(d_theta, 2*np.pi - d_theta)
 				d_x = xt - xq*math.cos(ht_theta) + yq*math.sin(ht_theta) - ht_x
 				d_y = yt - xq*math.sin(ht_theta) - yq*math.cos(ht_theta) - ht_y

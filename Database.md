@@ -1,6 +1,6 @@
 # Database
 
-Database can downloaded from [FVC2004 website](http://bias.csr.unibo.it/fvc2004/download.asp)
+Database can downloaded from [FVC2004 website](http://bias.csr.unibo.it/fvc2000/download.asp)
 
 ## Characteristics
 
